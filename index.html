@@ -1461,28 +1461,44 @@ function showToast(msg, type = '') {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ABLY CONFIG  ← paste your Ably API key here (publish only)
+//  ABLY CONFIG  ← load your Ably API key from .env at runtime
 // ═══════════════════════════════════════════════════════════════
-const ABLY_API_KEY = '0TZ7SA.6wlyfQ:CSQeEsQNHUAtneNwaktRsK3R0uzmod0D0fvVK2-5qUM';
+let ABLY_API_KEY = null;
 const ABLY_CHANNEL = 'glru-scoreboard';
 
-// Ably client — initialised once on first broadcast
 let _ablyClient = null;
 let _ablyChannel = null;
 let _ablyReady = false;
 const _ablyQueue = [];   // messages queued before connection is ready
 
+const _envPromise = fetch('./.env')
+  .then(res => {
+    if (!res.ok) throw new Error('Unable to load .env');
+    return res.text();
+  })
+  .then(text => {
+    const match = text.match(/ABLY_API_KEY\s*[:=]\s*['"]?([^'"\r\n]+)['"]?/);
+    if (!match) throw new Error('ABLY_API_KEY not found in .env');
+    ABLY_API_KEY = match[1].trim();
+    return ABLY_API_KEY;
+  })
+  .catch(err => {
+    console.warn(err.message);
+    return '';
+  });
+
 function getAblyChannel() {
   if (_ablyChannel) return Promise.resolve(_ablyChannel);
-  return new Promise((resolve) => {
+  return _envPromise.then(apiKey => new Promise((resolve) => {
+    if (!apiKey) { console.warn('Ably API key missing'); resolve(null); return; }
     if (!window.Ably) { console.warn('Ably SDK not loaded'); resolve(null); return; }
-    _ablyClient = new Ably.Realtime({ key: ABLY_API_KEY, clientId: 'capture-app' });
+    _ablyClient = new Ably.Realtime({ key: apiKey, clientId: 'capture-app' });
     _ablyClient.connection.once('connected', () => {
       _ablyChannel = _ablyClient.channels.get(ABLY_CHANNEL);
       resolve(_ablyChannel);
     });
     _ablyClient.connection.on('failed', () => { console.warn('Ably connection failed'); resolve(null); });
-  });
+  }));
 }
 
 // Debounce: max one publish per 300 ms per field (timer ticks fire every second)
