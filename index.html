@@ -475,6 +475,25 @@
   .timer-btn.stop   { background: var(--red-bright); color: #fff; }
   .timer-btn.reset  { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
 
+  /* ── Blank / Half Time button ── */
+  .blank-btn {
+    width: 100%;
+    background: #111;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: var(--radius);
+    color: rgba(255,255,255,0.45);
+    font-family: var(--font-body); font-size: 14px; font-weight: 700;
+    padding: 14px; cursor: pointer; letter-spacing: 1px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.2s;
+  }
+  .blank-btn:active { opacity: 0.8; }
+  .blank-btn.blanked {
+    background: #000;
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+
 </style>
 </head>
 <body>
@@ -500,7 +519,10 @@
     <div class="topbar">
       <div>
         <div class="topbar-title">GLRU</div>
-        <button class="topbar-btn" onclick="openScoreboard()" title="Open Scoreboard Window" style="font-size:11px;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-weight:700;letter-spacing:1px;">📺 SCOREBOARD</button>
+        <div style="display:flex;gap:5px;margin-top:4px;">
+          <button class="topbar-btn" onclick="openScoreboardLink(1)" title="Field 1 Scoreboard Link" style="font-size:10px;padding:5px 8px;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-weight:700;letter-spacing:1px;">📺 F1</button>
+          <button class="topbar-btn" onclick="openScoreboardLink(2)" title="Field 2 Scoreboard Link" style="font-size:10px;padding:5px 8px;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-weight:700;letter-spacing:1px;">📺 F2</button>
+        </div>
         <div class="topbar-sub">Rugby Score Capture</div>
       </div>
       <button class="topbar-btn" onclick="showHistory()" title="Match History">
@@ -537,6 +559,9 @@
             <div class="score-pill-label" id="f1-banner-opponent-label">OPPONENT</div>
           </div>
         </div>
+
+        <!-- Blank / Half Time Field 1 -->
+        <button class="blank-btn" id="f1-blank-btn" onclick="toggleBlank(1)">⬛ BLANK SCOREBOARD – HALF TIME</button>
 
         <!-- Match Timer Field 1 -->
         <div class="card">
@@ -730,6 +755,9 @@
             <div class="score-pill-label" id="f2-banner-opponent-label">OPPONENT</div>
           </div>
         </div>
+
+        <!-- Blank / Half Time Field 2 -->
+        <button class="blank-btn" id="f2-blank-btn" onclick="toggleBlank(2)">⬛ BLANK SCOREBOARD – HALF TIME</button>
 
         <!-- Match Timer Field 2 -->
         <div class="card">
@@ -1013,6 +1041,7 @@ function freshState() {
     triesFor: 0, conversionsFor: 0, penaltiesFor: 0, dropKicksFor: 0,
     triesAgainst: 0, conversionsAgainst: 0, penaltiesAgainst: 0, dropKicksAgainst: 0,
     subsFor: [], subsAgainst: [],
+    blanked: false,
   };
 }
 
@@ -1507,15 +1536,18 @@ function broadcastState(fieldNum) {
       totalAgainst: totalAgainst(fieldNum),
       timerSeconds: t.seconds,
       timerRunning: t.running,
+      blanked: s.blanked || false,
     };
     const ch = await getAblyChannel();
     if (ch) ch.publish('state', payload).catch(() => {});
   }, 300);
 }
 
-function openScoreboard() {
-  const sbUrl = 'https://lolifier4527.github.io/GLRU-Scoreboard/glru-scoreboard.html';
-  // Show shareable link popup
+function openScoreboardLink(fieldNum) {
+  const base = 'https://lolifier4527.github.io/GLRU-Scoreboard/glru-scoreboard.html';
+  const sbUrl = base + '?field=' + fieldNum;
+  const label = 'FIELD ' + fieldNum + ' SCOREBOARD LINK';
+
   let overlay = document.getElementById('share-overlay');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -1524,18 +1556,31 @@ function openScoreboard() {
     document.body.appendChild(overlay);
   }
   overlay.innerHTML = `
-    <div style="font-size:11px;color:#c0a090;margin-bottom:6px;letter-spacing:1px;font-weight:600;">📺 SHARE SCOREBOARD LINK</div>
-    <div style="font-size:12px;color:#F5A623;word-break:break-all;margin-bottom:12px;font-family:monospace;background:#2a0a0a;border-radius:8px;padding:8px 10px;">${sbUrl}</div>
+    <div style="font-size:11px;color:#c0a090;margin-bottom:6px;letter-spacing:1px;font-weight:600;">📺 ${label}</div>
+    <div style="font-size:11px;color:#F5A623;word-break:break-all;margin-bottom:12px;font-family:monospace;background:#2a0a0a;border-radius:8px;padding:8px 10px;">${sbUrl}</div>
     <button onclick="navigator.clipboard.writeText('${sbUrl}').then(()=>{this.textContent='✅ Copied!';setTimeout(()=>this.textContent='Copy Link',2000)}).catch(()=>{})"
       style="background:#F5A623;border:none;border-radius:8px;color:#111;font-weight:700;font-size:14px;padding:10px 20px;cursor:pointer;margin-right:8px;">Copy Link</button>
-    <button onclick="this.closest('#share-overlay').style.display='none'"
+    <button onclick="document.getElementById('share-overlay').style.display='none'"
       style="background:none;border:1px solid rgba(245,166,35,0.3);border-radius:8px;color:#c0a090;font-size:13px;padding:10px 14px;cursor:pointer;">Close</button>
   `;
   overlay.style.display = 'block';
   setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 15000);
 
-  // Push current state so scoreboard gets scores immediately
-  setTimeout(() => { broadcastState(1); broadcastState(2); }, 500);
+  // Push current state immediately so scoreboard has fresh data
+  setTimeout(() => { broadcastState(fieldNum); }, 300);
+}
+
+function toggleBlank(fieldNum) {
+  states[fieldNum].blanked = !states[fieldNum].blanked;
+  const btn = document.getElementById('f' + fieldNum + '-blank-btn');
+  if (states[fieldNum].blanked) {
+    btn.textContent = '▶ UNBLANK SCOREBOARD – RESUME';
+    btn.classList.add('blanked');
+  } else {
+    btn.textContent = '⬛ BLANK SCOREBOARD – HALF TIME';
+    btn.classList.remove('blanked');
+  }
+  broadcastState(fieldNum);
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -281,6 +281,31 @@
   }
   .sub-notification .sub-minute { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
 
+  /* ── Half-time blank overlay (per field) ── */
+  .halftime-overlay {
+    position: absolute; inset: 0; z-index: 20;
+    background: #000;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s;
+  }
+  .halftime-overlay.active { opacity: 1; pointer-events: all; }
+  .halftime-text {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 8vw, 96px);
+    color: var(--gold); letter-spacing: 8px;
+  }
+  .halftime-sub {
+    font-size: clamp(12px, 2vw, 18px);
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 4px; font-family: var(--font-display);
+  }
+
+  /* ── Dynamic field visibility ── */
+  .field-panel { display: none; }
+  .field-panel.active { display: flex; }
+
   /* ── No signal ── */
   #no-signal {
     position: absolute; inset: 0;
@@ -358,6 +383,11 @@
             <div class="breakdown-item"><div class="breakdown-val" id="f1-away-drop">0</div><div class="breakdown-label">Drop</div></div>
           </div>
         </div>
+        <!-- Half-time blank overlay -->
+        <div class="halftime-overlay" id="f1-halftime-overlay">
+          <div class="halftime-text">HALF TIME</div>
+          <div class="halftime-sub">FIELD 1</div>
+        </div>
         <!-- Sub notification -->
         <div class="sub-notification" id="f1-sub-notification">
           <div class="sub-icon">🔄</div>
@@ -410,6 +440,11 @@
             <div class="breakdown-item"><div class="breakdown-val" id="f2-away-drop">0</div><div class="breakdown-label">Drop</div></div>
           </div>
         </div>
+        <!-- Half-time blank overlay -->
+        <div class="halftime-overlay" id="f2-halftime-overlay">
+          <div class="halftime-text">HALF TIME</div>
+          <div class="halftime-sub">FIELD 2</div>
+        </div>
         <!-- Sub notification -->
         <div class="sub-notification" id="f2-sub-notification">
           <div class="sub-icon">🔄</div>
@@ -447,9 +482,16 @@ const REASONS = {
   REPLACEMENT_RED:    { label: 'Replacement Red Card',    color: '#EF9A9A' },
 };
 
-// ── Paste the same ABLY_API_KEY here as in index.html ──────────
-const ABLY_API_KEY   = '0TZ7SA.6wlyfQ:CSQeEsQNHUAtneNwaktRsK3R0uzmod0D0fvVK2-5qUM';
-const ABLY_CHANNEL   = 'glru-scoreboard';
+const ABLY_API_KEY = '0TZ7SA.6wlyfQ:CSQeEsQNHUAtneNwaktRsK3R0uzmod0D0fvVK2-5qUM';
+const ABLY_CHANNEL = 'glru-scoreboard';
+
+// ── Which field this scoreboard window shows ──────────────────
+// ?field=1 → only Field 1   |   ?field=2 → only Field 2   |   no param → auto
+const urlParams  = new URLSearchParams(window.location.search);
+const fieldParam = urlParams.has('field') ? parseInt(urlParams.get('field')) : null;
+
+// In auto mode track which fields have received data
+const fieldActive = { 1: false, 2: false };
 
 const subNotifTimers = { 1: null, 2: null };
 const prevSubCounts  = { 1: { for: 0, against: 0 }, 2: { for: 0, against: 0 } };
@@ -458,7 +500,24 @@ const prevScores     = { 1: { home: 0, away: 0 }, 2: { home: 0, away: 0 } };
 const noSignal = document.getElementById('no-signal');
 let receivedAny = false;
 
-// ── Connect to Ably and subscribe ─────────────────────────────
+// ── Panel visibility ──────────────────────────────────────────
+function updatePanelVisibility(fn) {
+  if (fieldParam !== null) {
+    // Fixed mode: only show the requested field
+    document.getElementById('field-panel-1').classList.toggle('active', fieldParam === 1);
+    document.getElementById('field-panel-2').classList.toggle('active', fieldParam === 2);
+    document.getElementById('topbar-age').textContent = 'FIELD ' + fieldParam;
+  } else {
+    // Auto mode: show any field that has sent data
+    fieldActive[fn] = true;
+    document.getElementById('field-panel-1').classList.toggle('active', fieldActive[1]);
+    document.getElementById('field-panel-2').classList.toggle('active', fieldActive[2]);
+    const both = fieldActive[1] && fieldActive[2];
+    document.getElementById('topbar-age').textContent = both ? 'DUAL FIELD' : 'FIELD ' + fn;
+  }
+}
+
+// ── Connect to Ably ───────────────────────────────────────────
 function connectAbly() {
   const client = new Ably.Realtime({ key: ABLY_API_KEY, clientId: 'scoreboard' });
 
@@ -477,22 +536,24 @@ function connectAbly() {
 
   const channel = client.channels.get(ABLY_CHANNEL);
 
-  // Rewind:1 means new viewers instantly see the last published state
   channel.subscribe('state', (msg) => {
-    if (!receivedAny) {
-      receivedAny = true;
-      noSignal.classList.add('hidden');
-    }
+    const fn = msg.data.fieldNum || 1;
+    // In fixed mode ignore messages for the other field
+    if (fieldParam !== null && fn !== fieldParam) return;
+    if (!receivedAny) { receivedAny = true; noSignal.classList.add('hidden'); }
+    updatePanelVisibility(fn);
     updateField(msg.data);
   });
 
-  // Also fetch last-known state via channel history on load
-  channel.history({ limit: 10 }, (err, result) => {
+  // Fetch history so scoreboard shows current state immediately on open
+  channel.history({ limit: 20 }, (err, result) => {
     if (err || !result) return;
-    // Items are newest-first; apply in reverse so latest wins
     const items = result.items.filter(i => i.name === 'state').reverse();
     items.forEach(i => {
+      const fn = (i.data.fieldNum) || 1;
+      if (fieldParam !== null && fn !== fieldParam) return;
       if (!receivedAny) { receivedAny = true; noSignal.classList.add('hidden'); }
+      updatePanelVisibility(fn);
       updateField(i.data);
     });
   });
@@ -535,6 +596,10 @@ function updateField(s) {
   const homeName = s.school || 'GLRU';
   const awayName = (s.opposingTeam || 'OPPONENT').toUpperCase();
 
+  // Half-time blank overlay
+  const overlay = document.getElementById(p + 'halftime-overlay');
+  if (overlay) overlay.classList.toggle('active', !!s.blanked);
+
   document.getElementById(p+'home-name').textContent = homeName;
   document.getElementById(p+'away-name').textContent = awayName;
   document.getElementById(p+'topbar-age').textContent = s.ageGroup || '–';
@@ -576,7 +641,7 @@ function updateField(s) {
   prevSubCounts[fn].against = subsAgainst.length;
 }
 
-// Try to go fullscreen on load for a truly borderless experience
+// Try to go fullscreen on load
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.documentElement;
   if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
