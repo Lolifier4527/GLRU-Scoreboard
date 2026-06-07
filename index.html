@@ -1015,6 +1015,10 @@
 
 <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
+// ── Which field this capture page is locked to (if any) ────────
+const _urlParams  = new URLSearchParams(window.location.search);
+const captureField = _urlParams.has('field') ? parseInt(_urlParams.get('field')) : null;
+
 // ═══════════════════════════════════════════════════════════════
 const SCHOOL = 'GLRU';
 const RECIPIENT = 'dean@laerskoolfairland.co.za';
@@ -1662,6 +1666,28 @@ function init() {
     timerUpdateDisplay(fn);
     render(fn);
   });
+
+  // Apply field lock if ?field=N is set
+  if (captureField !== null) {
+    // Hide tabs — only one field in use
+    document.querySelector('.field-tabs').style.display = 'none';
+
+    // Update topbar subtitle and scoreboard buttons
+    document.querySelector('.topbar-sub').textContent = 'Field ' + captureField + ' Score Capture';
+
+    // Show only one scoreboard link button
+    const f1btn = document.querySelector('[onclick="openScoreboardLink(1)"]');
+    const f2btn = document.querySelector('[onclick="openScoreboardLink(2)"]');
+    if (captureField === 1) { f2btn.style.display = 'none'; }
+    if (captureField === 2) { f1btn.style.display = 'none'; }
+
+    // Switch to and lock the relevant field
+    switchField(captureField);
+
+    // Hide the other field's content permanently
+    const other = captureField === 1 ? 2 : 1;
+    document.getElementById('field'+other+'-content').style.display = 'none';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
