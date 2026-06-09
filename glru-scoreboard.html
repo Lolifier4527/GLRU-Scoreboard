@@ -40,13 +40,6 @@ html, body {
 .topbar-title { font-family: var(--font-d); font-size: 26px; color: var(--gold); letter-spacing: 3px; line-height: 1; }
 .topbar-sub { font-size: 11px; color: rgba(245,166,35,0.65); letter-spacing: 2px; margin-top: 1px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
-.topbar-clock {
-  font-family: var(--font-d);
-  font-size: 22px;
-  color: rgba(245,166,35,0.85);
-  letter-spacing: 3px;
-  line-height: 1;
-}
 .live-badge {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 700; color: var(--green);
@@ -137,8 +130,9 @@ html, body {
 .score-num.tied   { color: rgba(255,255,255,0.6); }
 .score-vs-label {
   font-family: var(--font-d);
-  color: rgba(245,166,35,0.4);
+  color: rgba(245,166,35,0.75);
   flex: 0 0 auto; text-align: center;
+  min-width: 5ch;
 }
 
 /* ── Stats ── */
@@ -155,16 +149,6 @@ html, body {
 }
 .stat-pill .sv { color: rgba(245,166,35,0.8); font-weight: 700; }
 
-/* ── Timer ── */
-.break-row {
-  position: relative; z-index: 2;
-  text-align: center; padding: 0 12px 12px;
-}
-.timer-readout {
-  font-family: var(--font-d);
-  color: rgba(245,166,35,0.55);
-  letter-spacing: 3px;
-}
 
 /* ── Half time overlay ── */
 .halftime-overlay {
@@ -197,16 +181,14 @@ html, body {
 #fields-area.solo .age-group-label { font-size: clamp(24px, 4vw,  52px); }
 #fields-area.solo .team-name       { font-size: clamp(28px, 5vw,  72px); }
 #fields-area.solo .score-num       { font-size: clamp(110px,18vw,260px); }
-#fields-area.solo .score-vs-label  { font-size: clamp(32px, 5vw,  72px); }
-#fields-area.solo .timer-readout   { font-size: clamp(22px, 3vw,  44px); }
+#fields-area.solo .score-vs-label  { font-size: clamp(28px, 4vw,  60px); }
 
 /* ── Font sizes: dual panel ── */
 #fields-area.dual .field-label     { font-size: clamp(12px, 1.2vw, 18px); }
 #fields-area.dual .age-group-label { font-size: clamp(14px, 2vw,   30px); }
 #fields-area.dual .team-name       { font-size: clamp(14px, 2.2vw, 36px); }
 #fields-area.dual .score-num       { font-size: clamp(60px, 9vw,  130px); }
-#fields-area.dual .score-vs-label  { font-size: clamp(18px, 2.5vw, 38px); }
-#fields-area.dual .timer-readout   { font-size: clamp(14px, 1.8vw, 28px); }
+#fields-area.dual .score-vs-label  { font-size: clamp(16px, 2vw,   32px); }
 #fields-area.dual .stat-pill       { font-size: 11px; padding: 3px 8px; }
 
 /* dual border separator */
@@ -243,7 +225,6 @@ html, body {
     <div class="topbar-sub" id="topbar-sub">LIVE SCOREBOARD</div>
   </div>
   <div class="topbar-right">
-    <div class="topbar-clock" id="topbar-clock"></div>
     <div class="live-badge"><div class="live-dot"></div>LIVE</div>
   </div>
 </div>
@@ -313,9 +294,6 @@ function createSlotEl(idx) {
       </div>
     </div>
     <div class="stats-row" id="${sid}-stats"></div>
-    <div class="break-row">
-      <div class="timer-readout" id="${sid}-timer"></div>
-    </div>
     <div class="halftime-overlay" id="${sid}-ht">
       <div class="halftime-text">HALF TIME</div>
       <div class="halftime-sub" id="${sid}-ht-sub">–</div>
@@ -417,8 +395,10 @@ function renderSlot(idx) {
   const f = data.totalFor ?? 0, a = data.totalAgainst ?? 0;
   const sfEl = document.getElementById(sid + '-sf');
   const saEl = document.getElementById(sid + '-sa');
+  const vsEl = document.getElementById(sid + '-vs');
   if (sfEl) { sfEl.textContent = f; sfEl.className = 'score-num ' + (f > a ? 'leader' : 'tied'); }
   if (saEl) { saEl.textContent = a; saEl.className = 'score-num ' + (a > f ? 'leader' : 'tied'); }
+  if (vsEl) vsEl.textContent = data.timerSeconds != null ? timerFmt(data.timerSeconds) : '–';
 
   // Stats
   const statsEl = document.getElementById(sid + '-stats');
@@ -428,10 +408,6 @@ function renderSlot(idx) {
     <div class="stat-pill">P <span class="sv">${data.penaltiesFor??0}–${data.penaltiesAgainst??0}</span></div>
     <div class="stat-pill">DK <span class="sv">${data.dropKicksFor??0}–${data.dropKicksAgainst??0}</span></div>
   `;
-
-  // Timer
-  const timerEl = document.getElementById(sid + '-timer');
-  if (timerEl) timerEl.textContent = timerFmt(data.timerSeconds);
 
   // Blank / half time
   const htEl = document.getElementById(sid + '-ht');
@@ -484,21 +460,6 @@ ably.connection.on('connected', async () => {
 ch.subscribe('state', msg => {
   if (msg.data) handleState(msg.data);
 });
-
-// ═══════════════════════════════════════════════════════════════
-//  WALL CLOCK
-// ═══════════════════════════════════════════════════════════════
-(function tickClock() {
-  const el = document.getElementById('topbar-clock');
-  if (el) {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    el.textContent = h + ':' + m + ':' + s;
-  }
-  setTimeout(tickClock, 1000);
-})();
 </script>
 </body>
 </html>
