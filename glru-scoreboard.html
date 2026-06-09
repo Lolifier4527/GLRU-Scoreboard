@@ -40,13 +40,6 @@ html, body {
 .topbar-title { font-family: var(--font-d); font-size: 26px; color: var(--gold); letter-spacing: 3px; line-height: 1; }
 .topbar-sub { font-size: 11px; color: rgba(245,166,35,0.65); letter-spacing: 2px; margin-top: 1px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
-.topbar-clock {
-  font-family: var(--font-d);
-  font-size: 22px;
-  color: rgba(245,166,35,0.85);
-  letter-spacing: 3px;
-  line-height: 1;
-}
 .live-badge {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 700; color: var(--green);
@@ -244,7 +237,6 @@ html, body {
     <div class="topbar-sub" id="topbar-sub">LIVE SCOREBOARD</div>
   </div>
   <div class="topbar-right">
-    <div class="topbar-clock" id="topbar-clock"></div>
     <div class="live-badge"><div class="live-dot"></div>LIVE</div>
     <button onclick="toggleFullscreen()" id="fs-btn" title="Fullscreen" style="background:none;border:1px solid rgba(245,166,35,0.3);border-radius:8px;color:rgba(245,166,35,0.7);padding:5px 8px;cursor:pointer;font-size:16px;line-height:1;">⛶</button>
   </div>
@@ -503,20 +495,6 @@ ch.subscribe('state', msg => {
   if (msg.data) handleState(msg.data);
 });
 
-// ═══════════════════════════════════════════════════════════════
-//  WALL CLOCK
-// ═══════════════════════════════════════════════════════════════
-(function tickClock() {
-  const el = document.getElementById('topbar-clock');
-  if (el) {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    el.textContent = h + ':' + m + ':' + s;
-  }
-  setTimeout(tickClock, 1000);
-})();
 </script>
 </body>
 </html>
