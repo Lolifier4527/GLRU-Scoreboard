@@ -644,9 +644,63 @@ function submitResults(){
   document.getElementById('email-summary').innerHTML=`<strong>${s.homeTeam.trim()} ${f} – ${a} ${s.opposingTeam.trim()}</strong><br>${s.ageGroup} · Field ${currentField} · ${res}<br><br>Would you like to email the results to the sports administrator?`;
   document.getElementById('email-overlay').classList.add('open');
 }
+function buildEmailBody(m) {
+  const d = new Date(m.capturedAt);
+  const ds = d.toLocaleDateString('en-ZA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const ts = d.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
+  const res = {WIN:'✅ WIN',LOSS:'❌ LOSS',DRAW:'🤝 DRAW'}[m.result];
+  const subTable = (teamName, subs) => {
+    if (!subs || !subs.length) return `  ${teamName}:\n    No substitutions recorded.\n`;
+    let t = `  ${teamName}:\n  # | Off  | On   | Min  | Reason\n  --+------+------+------+---------------------\n`;
+    subs.forEach((s,i) => {
+      const r = REASONS.find(r=>r.key===s.reason)||REASONS[1];
+      t += `  ${String(i+1).padStart(2)} | ${('#'+s.playerOff).padEnd(5)}| ${('#'+s.playerOn).padEnd(5)}| ${s.minute?String(s.minute+"'").padEnd(5):'  -  '}| ${r.label}\n`;
+    });
+    return t;
+  };
+  return `Dear Sports Administrator,
+
+Match result captured on ${ds} at ${ts}.
+
+══════════════════════════════
+  MATCH DETAILS
+══════════════════════════════
+  Field       : Field ${m.fieldId}
+  Age Group   : ${m.ageGroup}
+  Home Team   : ${m.homeTeam}
+  Away Team   : ${m.opposingTeam}
+
+══════════════════════════════
+  SCOREBOARD
+══════════════════════════════
+                  ${m.homeTeam.padEnd(14)} ${m.opposingTeam}
+  Tries       :      ${String(m.triesFor).padEnd(14)} ${m.triesAgainst}
+  Conversions :      ${String(m.conversionsFor).padEnd(14)} ${m.conversionsAgainst}
+  Penalties   :      ${String(m.penaltiesFor).padEnd(14)} ${m.penaltiesAgainst}
+  Drop Kicks  :      ${String(m.dropKicksFor).padEnd(14)} ${m.dropKicksAgainst}
+
+  FINAL SCORE : ${m.homeTeam} ${m.totalFor} – ${m.totalAgainst} ${m.opposingTeam}
+  RESULT      : ${res}
+
+══════════════════════════════
+  SUBSTITUTIONS
+══════════════════════════════
+
+${subTable(m.homeTeam, m.subsFor)}
+${subTable(m.opposingTeam, m.subsAgainst)}
+
+This result was submitted via the GLRU Rugby Score App.
+
+Kind regards,
+Sports Department – GLRU`;
+}
+
 function sendEmail(){
   if(!pendingMatch)return;
-  const a=document.createElement('a');a.href=`mailto:${RECIPIENT}?subject=${encodeURIComponent('Rugby Results – Field '+pendingMatch.fieldId+' – '+pendingMatch.homeTeam+' vs '+pendingMatch.opposingTeam)}&body=${encodeURIComponent('FINAL: '+pendingMatch.homeTeam+' '+pendingMatch.totalFor+' – '+pendingMatch.totalAgainst+' '+pendingMatch.opposingTeam+'\nResult: '+pendingMatch.result)}`;
+  const subject = encodeURIComponent(`Rugby Results – Field ${pendingMatch.fieldId} – ${pendingMatch.ageGroup} – ${pendingMatch.homeTeam} vs ${pendingMatch.opposingTeam}`);
+  const body    = encodeURIComponent(buildEmailBody(pendingMatch));
+  const a = document.createElement('a');
+  a.href=`mailto:${RECIPIENT}?subject=${subject}&body=${body}`;
   a.target='_blank';document.body.appendChild(a);a.click();setTimeout(()=>document.body.removeChild(a),200);
   document.getElementById('email-overlay').classList.remove('open');markEmailSent(pendingMatch.id);
   const fid=pendingMatch.fieldId;pendingMatch=null;resetForm(fid);showToast('Email app opened! ✅','success');
@@ -660,11 +714,39 @@ function saveHistory(h){try{localStorage.setItem('rugby_history',JSON.stringify(
 function saveMatch(m){const h=loadHistory();h.unshift(m);saveHistory(h);}
 function markEmailSent(id){const h=loadHistory(),m=h.find(x=>x.id===id);if(m){m.emailSent=true;saveHistory(h);}}
 function clearHistory(){saveHistory([]);closeConfirm();renderHistory();showToast('History cleared.','success');}
+
+function exportCSV(){
+  const ms=loadHistory();
+  if(!ms.length){showToast('No matches to export.','error');return;}
+  const headers=['Date','Time','Field','Age Group','Home Team','Away Team','Home Score','Away Score','Result','Tries For','Conversions For','Penalties For','Drop Kicks For','Tries Against','Conversions Against','Penalties Against','Drop Kicks Against','Subs For','Subs Against'];
+  const rows=ms.map(m=>{
+    const d=new Date(m.capturedAt);
+    const dateStr=d.toLocaleDateString('en-ZA');
+    const timeStr=d.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
+    const subsForStr=(m.subsFor||[]).map(s=>`#${s.playerOff}→#${s.playerOn}${s.minute?'@'+s.minute+"'":''}(${s.reason})`).join('; ');
+    const subsAgtStr=(m.subsAgainst||[]).map(s=>`#${s.playerOff}→#${s.playerOn}${s.minute?'@'+s.minute+"'":''}(${s.reason})`).join('; ');
+    return [dateStr,timeStr,m.fieldId||'',m.ageGroup||'',m.homeTeam||'',m.opposingTeam||'',m.totalFor,m.totalAgainst,m.result,m.triesFor,m.conversionsFor,m.penaltiesFor,m.dropKicksFor,m.triesAgainst,m.conversionsAgainst,m.penaltiesAgainst,m.dropKicksAgainst,subsForStr,subsAgtStr].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
+  const csv=[headers.join(','),...rows].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='GLRU_Match_History_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},200);
+  showToast('CSV exported! 📊','success');
+}
+
 function renderHistory(){
   const ms=loadHistory(),body=document.getElementById('history-body');
   if(!ms.length){body.innerHTML=`<div class="empty-history"><div class="big-icon">🏉</div>No matches recorded yet</div>`;return;}
   const fmt=ts=>{const d=new Date(ts);return d.toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric'})+', '+d.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});};
-  body.innerHTML=`<button class="clear-btn" onclick="confirmClear()">🗑️ Clear All History</button>`+ms.map(m=>`<div class="history-match-card"><div class="history-match-header"><div><div class="history-match-title">${esc(m.ageGroup)} · ${esc(m.homeTeam||'Home')} vs ${esc(m.opposingTeam)}${m.fieldId?' · Field '+m.fieldId:''}</div><div class="history-match-date">${fmt(m.capturedAt)}</div></div><div class="result-badge ${m.result}">${m.result}</div></div><div class="history-score">${m.totalFor}<span> – </span>${m.totalAgainst}</div><div class="history-stats"><div class="stat-chip">T <b>${m.triesFor}–${m.triesAgainst}</b></div><div class="stat-chip">C <b>${m.conversionsFor}–${m.conversionsAgainst}</b></div><div class="stat-chip">P <b>${m.penaltiesFor}–${m.penaltiesAgainst}</b></div><div class="stat-chip">DK <b>${m.dropKicksFor}–${m.dropKicksAgainst}</b></div></div></div>`).join('');
+  body.innerHTML=
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+       <button class="clear-btn" style="margin:0" onclick="confirmClear()">🗑️ Clear History</button>
+       <button class="clear-btn" style="margin:0;border-color:rgba(245,166,35,0.35);color:var(--gold)" onclick="exportCSV()">📊 Export CSV</button>
+     </div>`+
+    ms.map(m=>`<div class="history-match-card"><div class="history-match-header"><div><div class="history-match-title">${esc(m.ageGroup)} · ${esc(m.homeTeam||'Home')} vs ${esc(m.opposingTeam)}${m.fieldId?' · Field '+m.fieldId:''}</div><div class="history-match-date">${fmt(m.capturedAt)}</div></div><div class="result-badge ${m.result}">${m.result}</div></div><div class="history-score">${m.totalFor}<span> – </span>${m.totalAgainst}</div><div class="history-stats"><div class="stat-chip">T <b>${m.triesFor}–${m.triesAgainst}</b></div><div class="stat-chip">C <b>${m.conversionsFor}–${m.conversionsAgainst}</b></div><div class="stat-chip">P <b>${m.penaltiesFor}–${m.penaltiesAgainst}</b></div><div class="stat-chip">DK <b>${m.dropKicksFor}–${m.dropKicksAgainst}</b></div>${(m.subsFor&&m.subsFor.length)||(m.subsAgainst&&m.subsAgainst.length)?`<div class="stat-chip">Subs <b>${(m.subsFor||[]).length+(m.subsAgainst||[]).length}</b></div>`:''}</div>${(m.subsFor&&m.subsFor.length)||(m.subsAgainst&&m.subsAgainst.length)?`<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">${(m.subsFor||[]).map(s=>`<span style="color:#66BB6A">#${s.playerOff}→#${s.playerOn}</span>`).join(', ')}${m.subsFor&&m.subsFor.length&&m.subsAgainst&&m.subsAgainst.length?' | ':''}${(m.subsAgainst||[]).map(s=>`<span style="color:#EF5350">#${s.playerOff}→#${s.playerOn}</span>`).join(', ')}</div>`:''}</div>`).join('');
 }
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function confirmClear(){const c=loadHistory().length;document.getElementById('confirm-title').textContent='Clear All History?';document.getElementById('confirm-msg').textContent=`Permanently delete all ${c} match${c!==1?'es':''}.`;document.getElementById('confirm-ok-btn').onclick=clearHistory;document.getElementById('confirm-overlay').classList.add('open');}
