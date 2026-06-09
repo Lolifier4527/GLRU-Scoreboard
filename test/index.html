@@ -86,7 +86,7 @@ html, body { background: var(--bg); color: var(--text); font-family: var(--font-
 .field input:focus { border-color: var(--gold); }
 .field.error input { border-color: #EF5350; }
 .err-msg { font-size: 11px; color: #EF5350; margin-top: 4px; display: none; }
-.age-group-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+.age-group-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; }
 .age-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); font-family: var(--font-b); font-size: 12px; font-weight: 600; padding: 9px 4px; cursor: pointer; text-align: center; transition: all 0.15s; }
 .age-btn:active { transform: scale(0.95); }
 .age-btn.selected { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
@@ -453,7 +453,7 @@ html, body { background: var(--bg); color: var(--text); font-family: var(--font-
 <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
 const FIELDS     = ['A','B','C','D','E','F','G'];
-const AGE_GROUPS = ['U/12 A','U/12 B','U/12 C','U/13 A','U/13 B','U/13 C'];
+const AGE_GROUPS = ['U/9','U/10','U/11','U/13'];
 const MAX_SUBS   = 20;
 const RECIPIENT  = 'dean@laerskoolfairland.co.za';
 const BASE       = 'https://lolifier4527.github.io/GLRU-Scoreboard/test/';
