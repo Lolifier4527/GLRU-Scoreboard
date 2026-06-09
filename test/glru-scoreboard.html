@@ -136,15 +136,16 @@ html, body {
 
 /* ── Stats ── */
 .stats-row {
-  display: flex; gap: 8px; justify-content: center;
-  flex-wrap: wrap; padding: 8px 12px;
+  display: flex; gap: 6px; justify-content: center;
+  flex-wrap: wrap; padding: 4px 12px 10px;
   position: relative; z-index: 2;
 }
 .stat-pill {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(245,166,35,0.12);
-  border-radius: 6px; padding: 4px 10px;
-  font-size: 12px; color: rgba(255,255,255,0.5);
+  border-radius: 8px; padding: 6px 14px;
+  font-size: clamp(11px, 1.8vw, 15px); color: rgba(255,255,255,0.5);
+  white-space: nowrap;
 }
 .stat-pill .sv { color: rgba(245,166,35,0.8); font-weight: 700; }
 
@@ -237,6 +238,7 @@ html, body {
   </div>
   <div class="topbar-right">
     <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <button onclick="toggleFullscreen()" id="fs-btn" title="Fullscreen" style="background:none;border:1px solid rgba(245,166,35,0.3);border-radius:8px;color:rgba(245,166,35,0.7);padding:5px 8px;cursor:pointer;font-size:16px;line-height:1;">⛶</button>
   </div>
 </div>
 
@@ -304,10 +306,10 @@ function createSlotEl(idx) {
         <div class="score-num tied" id="${sid}-sa">0</div>
       </div>
     </div>
-    <div class="stats-row" id="${sid}-stats"></div>
     <div class="break-row">
       <div class="timer-readout" id="${sid}-timer"></div>
     </div>
+    <div class="stats-row" id="${sid}-stats"></div>
     <div class="halftime-overlay" id="${sid}-ht">
       <div class="halftime-text">HALF TIME</div>
       <div class="halftime-sub" id="${sid}-ht-sub">–</div>
@@ -461,6 +463,22 @@ function handleState(data) {
 // ═══════════════════════════════════════════════════════════════
 //  ABLY
 // ═══════════════════════════════════════════════════════════════
+// ── Fullscreen ────────────────────────────────────────────────
+function toggleFullscreen() {
+  const btn = document.getElementById('fs-btn');
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+    if (btn) btn.textContent = '✕';
+  } else {
+    document.exitFullscreen().catch(() => {});
+    if (btn) btn.textContent = '⛶';
+  }
+}
+document.addEventListener('fullscreenchange', () => {
+  const btn = document.getElementById('fs-btn');
+  if (btn) btn.textContent = document.fullscreenElement ? '✕' : '⛶';
+});
+
 const ably = new Ably.Realtime({ key: ABLY_API_KEY, clientId: 'scoreboard-display' });
 const ch   = ably.channels.get(ABLY_CHANNEL);
 
